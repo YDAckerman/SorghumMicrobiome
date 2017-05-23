@@ -1,3 +1,6 @@
+## perform a within/between euclidean distance comparison of the data
+## using four normalization methods: TMM, RLE, RAR, NON
+
 library(edgeR)
 library(vegan)
 library(dplyr)
@@ -40,6 +43,7 @@ dist_within <- ldply(methods, function(set){
         i <- which(colnames(d) %in% c("SampleID", "Batch", "Till",
                                       "Covercrop", "Replicate", "SampleType"
                                       ))
+        ## calculate euclidean distances
         dmat <- dist(d[, -i])
         data.frame(method = set, max = max(dmat), min = min(dmat),
                    mean = mean(dmat), median = median(dmat))
@@ -56,7 +60,8 @@ dist_between <- ldply(methods, function(set){
                 dplyr::filter(SampleType != stype)
             i <- which(colnames(data) %in% c("SampleID", "Batch", "Till",
                                       "Covercrop", "Replicate", "SampleType"
-                                      ))
+                                             ))
+            ## calculate euclidean distances
             dmat <- dist(data[, -i])
             data.frame(method = set, excluding = stype, dist = max(dmat))
         })

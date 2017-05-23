@@ -1,3 +1,10 @@
+## This code was a preliminary step towards building
+## Ftest.R. Note: this was all written before I knew
+## how to perform F tests using much cleaner linear
+## algebra... Anyone who reads this, take a linear
+## models course (or read Plane Answers to Complex Questions
+## by Christensen). It'll make your life better.
+
 library(edgeR)
 library(ecodist)
 library(entropy)

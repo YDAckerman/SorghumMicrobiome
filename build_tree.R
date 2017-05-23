@@ -1,3 +1,5 @@
+## build a pylogenetic tree (two methods) using our otu data.
+
 library(seqinr)
 library(ape)
 

@@ -1,3 +1,5 @@
+## General, haphazard explorations.
+
 library(biom)
 library(plyr)
 library(ggplot2)

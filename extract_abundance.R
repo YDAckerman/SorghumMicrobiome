@@ -1,3 +1,5 @@
+## extract the abundance data
+
 library(plyr)
 lines <- readLines("~/Documents/PurdomGroup/data/abundance.txt")
 

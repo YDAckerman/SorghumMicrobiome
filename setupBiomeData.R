@@ -1,3 +1,4 @@
+## Functions for prepping the microbiome data
 
 #' load_mbiome
 #'

@@ -1,3 +1,7 @@
+## Run permutation tests on the abundance
+## F statistic. I don't think I ended up using
+## this...
+
 library(edgeR)
 library(ecodist)
 library(entropy)
@@ -33,6 +37,7 @@ numPerms <- 100
 seeds <- sample(500:1000, numPerms)
 permData <- llply(1:numPerms, function(i){NA})
 
+## function to permute the data
 tmpfn <- function(.data, seed){
     set.seed(seed)
     j <- sample(1:nrow(.data), nrow(.data),
