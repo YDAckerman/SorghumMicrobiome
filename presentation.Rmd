@@ -1,0 +1,212 @@
+---
+title: "Exploring the Data"
+author: Yoni Ackerman
+date: October 25, 2016
+output: pdf_document
+---
+
+# Brief Summary
+
+```{r echo = FALSE, cache = TRUE, warn = FALSE}
+library(biom)
+library(plyr)
+library(dplyr)
+library(ggplot2)
+library(reshape2)
+
+sample_data <- read.csv("Till_metadata_nodepth.txt",
+			header = TRUE, 
+                        stringsAsFactors = FALSE)
+data <- read_biom("otu.biom")
+
+## tmp <- biom_data(data)
+## the S4 method throws an error...
+tmp <- as.list(data)
+
+tmp_data <- ldply(tmp$data, function(row){
+    as.data.frame(matrix(as.numeric(row), 1, 101))
+})
+
+tmp_data <- t(tmp_data)
+
+obs_meta_dat <- observation_metadata(data)
+colnames(tmp_data) <- rownames(data)
+rownames(tmp_data) <- colnames(data)
+biom_data <- tmp_data
+
+datadf <- as.data.frame(tmp_data)
+datadf$SampleID <- rownames(tmp_data)
+all_data <- left_join(datadf, sample_data, by = "SampleID")
+```
+
+## Data Shape + Meta Data
+
+The dataset is made up of 101 samples, and 7234 different OTU features.
+Here is a data summary and meta data for the first OTU:
+
+```{r echo = FALSE}
+obs_meta_dat[[1]]
+summary(biom_data[,"0"])
+```
+
+I haven't looked at how taxonomically similar all the OTU's are, but that's
+on my todo list.
+
+We've also got more information about the samples.
+Here are some of the sample id's:
+
+```{r echo = FALSE}
+head(rownames(biom_data))
+```
+
+These give us information on Batch, Till, Covercrop, Replicate, and SampleType
+(Soil, Rhizosphere, or Root).
+
+
+
+## Library Sizes
+
+The library size varies widely across the samples:
+
+```{r echo = FALSE}
+lib_size <- rowSums(biom_data)
+hist(lib_size)
+```
+
+```{r echo = FALSE}
+qplot(log(lib_size + 1), geom = "density")
+```
+
+Library size vs. number of OTU's:
+
+```{r echo = FALSE}
+sample_otu_counts <- rowSums(tmp_data > 0)
+qplot(x = lib_size, y = sample_otu_counts, geom = "point")
+```
+
+Along the same lines, we can ask about the distribution
+of unique species:
+
+```{r echo = FALSE}
+num_species <- rowSums(biom_data > 0)
+hist(num_species)
+```
+
+## Sparcity
+```{r echo = FALSE, cache = TRUE}
+tmp <- melt(data = biom_data)
+tmp$value <- tmp$value > 0
+
+ggplot(tmp, aes(x = Var1, y = Var2)) +
+    geom_tile(aes(fill = value)) +
+    theme(axis.text.x=element_blank(),
+          axis.ticks.x=element_blank()) +
+    xlab("Sample") +
+    ylab("OTU")
+```
+
+## library size issues (normalization)
+
+A common (bad) practice is rarefaction - down sampling each sample so that
+all samples have the same library size. Rarefaction is also a way to measure
+how well your samples capture the diversity of the species present. Here are
+some rarefaction curves:
+
+```{r cache = TRUE}
+set.seed(35)
+i <- sample(1:101, 10)
+N <- seq(from = 3000, to = 38000, by = 5000)
+times <-  10
+rarefaction_curves <- ldply(i, function(sample_i){
+    ldply(1:times, function(iterate_j){
+        num_unique <- sapply(N, function(rarefy_N){
+            row <- biom_data[sample_i,]
+            vals <- rep(1:7234, times = row)
+            dwn_sample <- sample(vals,
+                                 rarefy_N,
+                                 replace = TRUE)
+            length(unique(dwn_sample))
+        })
+        data.frame(sample = sample_i,
+                   iterate = iterate_j,
+                   N = N,
+                   num_species = num_unique)
+    })
+})
+
+ggplot(rarefaction_curves,
+       aes(x = N,
+           y = num_species,
+           group = sample,
+           color = sample)) +
+    geom_smooth()
+```
+
+The problem is that rarefaction introduces artificial uncertainty.
+Furthermore, it means throwing away potentially large amounts of data.
+
+# An Example: MDS
+
+## Without rarefying:
+
+```{r echo = TRUE, cache = TRUE}
+d <- dist(biom_data) # euclidean distances between the rows
+fit <- cmdscale(d,eig=TRUE, k=2) # k is the number of dim
+points <- as.data.frame(fit$points)
+colnames(points) <- c("x", "y")
+points <- cbind(all_data[, c("Replicate", "SampleType")], points)
+ggplot(points, aes(x = x, y = y, color = SampleType)) +
+    geom_point()
+```
+
+## normalizing by library size:
+```{r echo = TRUE, cache = TRUE}
+row_sums <- rowSums(biom_data)
+ndata <- biom_data / row_sums
+d <- dist(ndata)
+fit <- cmdscale(d,eig=TRUE, k=2)
+points <- as.data.frame(fit$points)
+colnames(points) <- c("x", "y")
+points <- cbind(all_data[, c("Replicate", "SampleType")], points)
+ggplot(points, aes(x = x, y = y, color = SampleType)) +
+    geom_point()
+```
+
+## rarefying (down sampling to the smallest library size):
+```{r echo = TRUE, cache = TRUE}
+ds_data <- ldply(1:nrow(biom_data), function(i){
+    row <- biom_data[i,]
+    vals <- rep(1:7234, times = row)
+    dwn_sample <- sample(vals,
+                         2510, ## sample down to the smallest library size
+                         replace = TRUE) 
+    dwn_sample <- table(dwn_sample)
+    missing <- !(1:7234 %in% names(dwn_sample))
+    missing_names <- (1:7234)[missing]
+    missing_values <- rep(0, length(missing_names))
+    names(missing_values) <- missing_names
+    dwn_sample <- c(dwn_sample, missing_values)
+    dwn_sample <- dwn_sample[order(as.integer(names(dwn_sample)))]
+    ds_row <- dwn_sample
+})
+
+d <- dist(ds_data)
+fit <- cmdscale(d,eig=TRUE, k=2)
+points <- as.data.frame(fit$points)
+colnames(points) <- c("x", "y")
+points <- cbind(all_data[, c("Replicate", "SampleType")], points)
+ggplot(points, aes(x = x, y = y, color = SampleType)) +
+    geom_point()
+```
+
+## Presence/Absence:
+```{r echo = TRUE, cache = TRUE}
+pa_data <- tmp_data > 0
+d <- dist(pa_data)
+fit <- cmdscale(d,eig=TRUE, k=2) # k is the number of dim
+points <- as.data.frame(fit$points)
+colnames(points) <- c("x", "y")
+points <- cbind(all_data[, c("Replicate", "SampleType")], points)
+ggplot(points, aes(x = x, y = y, color = SampleType)) +
+    geom_point()
+```
